@@ -27,6 +27,8 @@ import threading
 import sys
 import glob
 import serial.tools.list_ports
+from PyQt4.QtCore import QThread, pyqtSignal, pyqtSlot, SIGNAL
+
 
 
 SAMPLE_RATE = 250.0  # Hz
@@ -125,7 +127,10 @@ class OpenBCIBoard(object):
   def getNbAUXChannels(self):
     return  self.aux_channels_per_sample
 
-  def start_streaming(self, callback, lapse=-1):
+  def run(self):
+    self.start_streaming()
+
+  def start_streaming(self, parent, lapse=-1):
     """
     Start handling streaming data from the board. Call a provided callback
     for every single sample that is processed (every two samples with daisy module).
@@ -139,12 +144,8 @@ class OpenBCIBoard(object):
       self.streaming = True
 
     start_time = timeit.default_timer()
-
-    # Enclose callback funtion in a list if it comes alone
-    if not isinstance(callback, list):
-      callback = [callback]
-    
-
+    for p in parent:
+      parent = p
     #Initialize check connection
     self.check_connection()
 
@@ -162,16 +163,14 @@ class OpenBCIBoard(object):
           # the aux data will be the average between the two samples, as the channel samples themselves have been averaged by the board
           avg_aux_data = list((np.array(sample.aux_data) + np.array(self.last_odd_sample.aux_data))/2)
           whole_sample = OpenBCISample(sample.id, sample.channel_data + self.last_odd_sample.channel_data, avg_aux_data)
-          for call in callback:
-            call(whole_sample)
+          parent.data_collect(sample)
       else:
-        for call in callback:
-          call(sample)
+        parent.data_collect(sample)
       
-      if(lapse > 0 and timeit.default_timer() - start_time > lapse):
-        self.stop();
-      if self.log:
-        self.log_packet_count = self.log_packet_count + 1;
+      # if(lapse > 0 and timeit.default_timer() - start_time > lapse):
+      #   self.stop();
+      # if self.log:
+      #   self.log_packet_count = self.log_packet_count + 1;
   
   
   """
@@ -250,7 +249,7 @@ class OpenBCIBoard(object):
           log_bytes_in = log_bytes_in + '|' + str(acc);
 
           if self.scaling_output:
-            aux_data.append(acc*scale_fac_accel_G_per_count)
+            aux_data.append(acc)
           else:
               aux_data.append(acc)
 
@@ -455,11 +454,12 @@ class OpenBCIBoard(object):
 
   def check_connection(self, interval = 2, max_packets_to_skip=10):
     #check number of dropped packages and establish connection problem if too large
-    if self.packets_dropped > max_packets_to_skip:
-      #if error, attempt to reconect
-      self.reconnect()
-    # check again again in 2 seconds
-    threading.Timer(interval, self.check_connection).start()
+    # if self.packets_dropped > max_packets_to_skip:
+    #   #if error, attempt to reconect
+    #   self.reconnect()
+    # # check again again in 2 seconds
+    # threading.Timer(interval, self.check_connection).start()
+    pass
 
   def reconnect(self):
     self.packets_dropped = 0
