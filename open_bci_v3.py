@@ -130,7 +130,7 @@ class OpenBCIBoard(object):
   def run(self):
     self.start_streaming()
 
-  def start_streaming(self, parent, lapse=-1):
+  def start_streaming(self, callback, lapse=-1):
     """
     Start handling streaming data from the board. Call a provided callback
     for every single sample that is processed (every two samples with daisy module).
@@ -144,8 +144,9 @@ class OpenBCIBoard(object):
       self.streaming = True
 
     start_time = timeit.default_timer()
-    for p in parent:
-      parent = p
+
+    if not isinstance(callback, list):
+      callback = [callback]
     #Initialize check connection
     self.check_connection()
 
@@ -163,9 +164,11 @@ class OpenBCIBoard(object):
           # the aux data will be the average between the two samples, as the channel samples themselves have been averaged by the board
           avg_aux_data = list((np.array(sample.aux_data) + np.array(self.last_odd_sample.aux_data))/2)
           whole_sample = OpenBCISample(sample.id, sample.channel_data + self.last_odd_sample.channel_data, avg_aux_data)
-          parent.data_collect(sample)
+          for call in callback:
+            call(whole_sample)
       else:
-        parent.data_collect(sample)
+        for call in callback:
+          call(sample)
       
       # if(lapse > 0 and timeit.default_timer() - start_time > lapse):
       #   self.stop();
