@@ -57,20 +57,10 @@ class GUI(QtGui.QWidget):
 		self.ecg_scroll.setLabel('left','Amplitude','uV')
 		self.ecg_curve = self.ecg_scroll.plot()
 
-		#BPM Display
-		self.bpm_display = QtGui.QLCDNumber(self)
-		self.bpm_display.display("--")
-		self.bpm_display.setFixedWidth(200)
-		#Breaths Per Minute Display
-		self.breathspermin_display = QtGui.QLCDNumber(self)
-		self.breathspermin_display.display("--")
-		self.breathspermin_display.setFixedWidth(200)
-
-
 		#IBI-BPM-BPM Scroll
 		self.analysis_scroll = pg.PlotWidget(title="Inter Beat Interval - Beats Per Minute - Breaths Per Minute")
-		self.analysis_scroll_time_axis = np.linspace(-1000,0,500)
-		self.analysis_scroll.setXRange(-500,0,padding=0.0001)
+		self.analysis_scroll_time_axis = np.linspace(-300000,0,15000)
+		self.analysis_scroll.setXRange(-5000,0,padding=0.0001)
 		self.analysis_scroll.setLabel('bottom','Samples')
 		self.analysis_scroll.setLabel('left','Magnitude')			
 		self.analysis_scroll.setYRange(0,1.5)
@@ -80,16 +70,35 @@ class GUI(QtGui.QWidget):
 		#IBi Curve
 		self.ibi_curve = self.analysis_scroll.plot()
 		self.ibi_curve.setPen(color=(255,0,0))
-		#Breathing Curve
-		self.breathing_curve = self.analysis_scroll.plot()
-		self.breathing_curve.setPen(color=(0,0,255))
+		#Breathing Curves
+		self.breathing_curve1 = self.analysis_scroll.plot()
+		self.breathing_curve1.setPen(color=(135,206,235))
+		self.breathing_curve2 = self.analysis_scroll.plot()
+		self.breathing_curve2.setPen(color=(0,191,255))
+		self.breathing_curve3 = self.analysis_scroll.plot()
+		self.breathing_curve3.setPen(color=(0,0,255))
+		self.breathing_curves = [self.breathing_curve1,self.breathing_curve2,self.breathing_curve3]
 
+		#BPM Display
+		self.bpm_display = QtGui.QLCDNumber(self)
+		self.bpm_display.display("--")
+		self.bpm_display.setFixedWidth(200)
+		#BPM Display Title
+		self.bpm_display_title = QtGui.QLabel("Heart Beats Per Min")
+		self.bpm_display_title.setFixedHeight(20)
+		#Breaths Per Minute Display
+		self.breathspermin_display = QtGui.QLCDNumber(self)
+		self.breathspermin_display.display("--")
+		self.breathspermin_display.setFixedWidth(200)
+		self.breathspermin_display_title = QtGui.QLabel("Breaths Per Minute")
+		self.breathspermin_display_title.setFixedHeight(20)
 
 		#Respiratory meters
 		self.resp_plot = pg.PlotWidget(title="Breath Monitor")
 		self.resp_plot.setXRange(-0.5,2.5)
+		self.resp_plot.setYRange(0,200)
 		self.resp_plot.hideAxis('left')
-		self.rect1 = pg.BarGraphItem(x=[0,1,2],height=2,width=.2,brush='r')
+		self.rect1 = pg.BarGraphItem(x=[0,1,2],height=200,width=.2,brush='r')
 		xdict = dict(enumerate(['Input 1','Input 2','Input 3']))
 		axis = self.resp_plot.getAxis("bottom")
 		axis.setTicks([xdict.items()])
@@ -101,9 +110,13 @@ class GUI(QtGui.QWidget):
 		layout.addWidget(self.connect_button,2,0)
 		layout.addWidget(self.ecg_scroll,3,0,1,3)
 		layout.addWidget(self.analysis_scroll,4,0,1,3)
-		layout.addWidget(self.bpm_display,5,0)
-		layout.addWidget(self.resp_plot,5,1)
-		layout.addWidget(self.breathspermin_display,5,2)
+		layout.addWidget(self.bpm_display_title,5,0)
+		layout.addWidget(self.bpm_display,6,0)
+		layout.addWidget(self.breathspermin_display_title,5,2)
+		layout.addWidget(self.breathspermin_display,6,2)
+		layout.addWidget(self.resp_plot,5,1,2,1)
+
+
 		self.setLayout(layout)
 
 		self.show()
@@ -127,6 +140,7 @@ class GUI(QtGui.QWidget):
 		ibi_array = data['ibi_array']
 		heart_rate_array = data['heart_rate_array']
 		current_bpm = data['current_bpm']
+		current_breathing_rate = data['current_breathing_rate']
 		breathing_rate_array = data['breathing_rate_array']
 		raw_rband = data['raw_rband']
 
@@ -134,20 +148,51 @@ class GUI(QtGui.QWidget):
 		ibi_array = np.asarray(ibi_array)									#convert deque to array
 		heart_rate_array = np.asarray(heart_rate_array)	 	#convert deque to array
 		heart_rate_array = heart_rate_array/180.0					#turn bpm into a percentage of 180 (theoretical bpm maximum)
-		
-		breathing_rate_array = np.asarray(breathing_rate_array)
-		breathing_rate_array = breathing_rate_array/120 	#turn breaths into a percentage of 120 (thearetical maximum)
-		heart_rate_array[0] = 10
+		heart_rate_array[0] = 10													#quick fix for plotting issues
+
 		# Update plot
 		self.ecg_curve.setData(x=self.ecg_scroll_time_axis,y=([point for point in ecg_data]))
 		self.bpm_curve.setData(x=self.analysis_scroll_time_axis,y=([point for point in heart_rate_array]))
 		self.ibi_curve.setData(x=self.analysis_scroll_time_axis,y=([point for point in ibi_array]))		
+		# Update the breathing rate curves
+		for i,chan in enumerate(breathing_rate_array):
+			chan = np.asarray(chan)
+			chan = chan/40 	#turn breaths into a percentage of 120 (thearetical maximum)
+			if np.mean(chan) != 0:
+				self.breathing_curves[i].setVisible(False)
+			else:
+				self.breathing_curves[i].setVisible(True)
+				self.breathing_curves[i].setData(x=self.analysis_scroll_time_axis,y=([point for point in chan]))
+
+
+		
+		#update the breathing bands
+		for i,ch in enumerate(raw_rband):
+			if ch != 0:
+				raw_rband[i] = ch - 400
+		self.resp_plot.removeItem(self.rect1)
+		self.rect1 = pg.BarGraphItem(x=[0,1,2],height=raw_rband,width=.2,brush='r')
+		xdict = dict(enumerate(['Input 1','Input 2','Input 3']))
+		axis = self.resp_plot.getAxis("bottom")
+		axis.setTicks([xdict.items()])
+		self.resp_plot.addItem(self.rect1)
 
 		#Update Displays
 		if current_bpm == 0:
 			current_bpm = "--"
 		self.bpm_display.display(current_bpm)
+		
+		sigma=0
+		count=1
+		for chan in current_breathing_rate:
+			if chan!=0:
+				sigma+=chan
+				count+=1
+		average_breathing_rate = sigma/count
 
+		if average_breathing_rate == 0:
+			average_breathing_rate = "--"
+		self.breathspermin_display.display(average_breathing_rate)
 		
 
 
@@ -169,6 +214,9 @@ class Data_Buffer(QThread):
 		self.rband_buf3 = deque([0]*self.rband_buffer_size)
 
 		self.analysis = Analysis()
+		self.respiratory_analysis1 = Analysis()
+		self.respiratory_analysis2 = Analysis()
+		self.respiratory_analysis3 = Analysis()
 		self.count = 0
 		self.board = None
 
@@ -233,15 +281,32 @@ class Data_Buffer(QThread):
 			filtered = self.analyze_filters.bandpass(self.data_buf)
 			self.analysis.peak_detect(filtered)
 			#BREATHING DATA
-			breathing_rate = self.analysis.respiratory_analysis(self.rband_buf3)
+
+
+			self.respiratory_analysis1.respiratory_analysis(self.rband_buf1)
+			self.respiratory_analysis2.respiratory_analysis(self.rband_buf2)
+			self.respiratory_analysis3.respiratory_analysis(self.rband_buf3)
+
+			current_breathpermin = [
+								self.respiratory_analysis1.current_breathpermin,
+								self.respiratory_analysis2.current_breathpermin,
+								self.respiratory_analysis3.current_breathpermin
+			]
+
+			breathing_rate_array = [
+								self.respiratory_analysis1.breathing_rate_array,
+								self.respiratory_analysis2.breathing_rate_array,
+								self.respiratory_analysis3.breathing_rate_array
+			]
 
 			#pack data into dictionary
 			data_to_plot = {
 				'ecg_data' : ecg_display,
-				'ibi_array' : self.analysis.ibi_array,
+				'ibi_array' : self.analysis.ibi_display,
 				'heart_rate_array' : self.analysis.heart_rate_array,
 				'current_bpm' : self.analysis.current_bpm,
-				'breathing_rate_array' : self.analysis.breathing_rate_array,
+				'breathing_rate_array' : breathing_rate_array,
+				'current_breathing_rate': current_breathpermin,
 				'raw_rband' : raw_rband
 			}
 			self.new_data.emit(data_to_plot)
@@ -251,13 +316,15 @@ class Analysis:
 		self.last_beat = 0
 		self.last_breath = 0
 		self.number_of_beats = 15
+		self.number_of_breaths = 7
 		self.beat_buffer = deque([0]*self.number_of_beats)
-		self.breath_buffer = deque([0]*self.number_of_beats)
+		self.breath_buffer = deque([0]*self.number_of_breaths)
 		self.ibi_array = deque([0]*500)
-		self.hrv_diff = deque([0]*100)
-		self.heart_rate_array = deque([0]*500)
-		self.breathing_rate_array = deque([0]*500)
+		self.ibi_display = deque([0]*15000)
+		self.heart_rate_array = deque([0]*15000)
+		self.breathing_rate_array = deque([0]*15000)
 		self.current_bpm = 0
+		self.current_breathpermin = 0
 		self.BREATH = False
 
 
@@ -266,10 +333,6 @@ class Analysis:
 		peak_data = self.pan_tompkins(data_buf)
 		self.peak_data = peak_data
 		current_time = time.time()
-		if self.current_bpm > 40:
-			time_threshold = 1/(self.current_bpm+20) * 60 #the next beat can't be more than 10 bpm higher than the last
-		else:
-			time_threshold = .300	
 		for i in range(25):
 			# Threshold for heartbeat: 1) 300ms since last beat 2) peak detected
 			if (current_time - self.last_beat >.300 and (peak_data[-(i+1)] - peak_data[-i]) > 10):
@@ -282,6 +345,13 @@ class Analysis:
 				#calculate the bpm
 				self.bpm()
 				break
+
+		self.heart_rate_array.popleft()
+		self.heart_rate_array.append(self.current_bpm)
+
+
+		self.ibi_display.popleft()
+		self.ibi_display.append(self.ibi_array[-1])
 
 
 	def pan_tompkins(self,data_buf):
@@ -309,33 +379,27 @@ class Analysis:
 		total_time = self.beat_buffer[-1] - self.beat_buffer[0]
 		bpm = (60/total_time)*self.number_of_beats
 		self.current_bpm = int(bpm)
-		self.heart_rate_array.popleft()
-		self.heart_rate_array.append(self.current_bpm)
 		return self.current_bpm
 
 	def respiratory_analysis(self,resp_buf):
 		resp_diff = np.diff(resp_buf)
 		current_time = time.time()
-		if (not self.BREATH and (resp_buf[-150] - resp_buf[-1]) < -15):
-			time_dif = current_time - self.last_breath
+		if (not self.BREATH and (resp_buf[-150] - resp_buf[-1]) < -10):
 			self.last_breath = current_time
-			self.breathing_rate_array.popleft()
-			self.breathing_rate_array.append(time_dif)
 			self.breaths_per_minute()
 			self.BREATH = True
-		elif (self.BREATH and (resp_buf[-150] - resp_buf[-1]) > 15):
+		elif (self.BREATH and (resp_buf[-150] - resp_buf[-1]) > 10):
 			self.BREATH = False
-			print("OUT")
+		self.breathing_rate_array.popleft()
+		self.breathing_rate_array.append(self.current_breathpermin)
+
 
 	def breaths_per_minute(self):
 		self.breath_buffer.popleft()
 		self.breath_buffer.append(self.last_breath)
-		total_time = self.breath_buffer[-1] - self.breath_buffer[0]
-		bpm = (60/total_time)*len(self.breath_buffer)
-		self.current_bpm = int(bpm)
-		self.bpm_array.popleft()
-		self.bpm_array.append(self.current_bpm)
-		return self.current_bpm
+		total_time = self.breath_buffer[-1] - self.breath_buffer[-2]
+		bpm = (60/total_time)*2
+		self.current_breathpermin = int(bpm)
 
 def data_feed(db):
 	'''
