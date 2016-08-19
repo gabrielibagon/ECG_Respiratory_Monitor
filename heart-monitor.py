@@ -58,9 +58,9 @@ class GUI(QtGui.QWidget):
 		self.ecg_curve = self.ecg_scroll.plot()
 
 		#IBI-BPM-BPM Scroll
-		self.analysis_scroll = pg.PlotWidget(title="Inter Beat Interval - Beats Per Minute - Breaths Per Minute")
+		self.analysis_scroll = pg.PlotWidget()
 		self.analysis_scroll_time_axis = np.linspace(-300000,0,15000)
-		self.analysis_scroll.setXRange(-5000,0,padding=0.0001)
+		self.analysis_scroll.setXRange(-10000,0,padding=0.0001)
 		self.analysis_scroll.setLabel('bottom','Samples')
 		self.analysis_scroll.setLabel('left','Magnitude')			
 		self.analysis_scroll.setYRange(0,1.5)
@@ -76,8 +76,13 @@ class GUI(QtGui.QWidget):
 		self.breathing_curve2 = self.analysis_scroll.plot()
 		self.breathing_curve2.setPen(color=(0,191,255))
 		self.breathing_curve3 = self.analysis_scroll.plot()
-		self.breathing_curve3.setPen(color=(0,0,255))
+		self.breathing_curve3.setPen(color=(102,102,250))
 		self.breathing_curves = [self.breathing_curve1,self.breathing_curve2,self.breathing_curve3]
+		#Legend
+		self.legend = self.analysis_scroll.addLegend()
+		self.legend.addItem(self.bpm_curve,'Heart Rate')
+		self.legend.addItem(self.ibi_curve,'Inter Beat Interval')
+		self.BREATHING_LEGEND = [False,False,False]
 
 		#BPM Display
 		self.bpm_display = QtGui.QLCDNumber(self)
@@ -90,7 +95,7 @@ class GUI(QtGui.QWidget):
 		self.breathspermin_display = QtGui.QLCDNumber(self)
 		self.breathspermin_display.display("--")
 		self.breathspermin_display.setFixedWidth(200)
-		self.breathspermin_display_title = QtGui.QLabel("Breaths Per Minute")
+		self.breathspermin_display_title = QtGui.QLabel("Est. Breaths Per Minute")
 		self.breathspermin_display_title.setFixedHeight(20)
 
 		#Respiratory meters
@@ -155,17 +160,23 @@ class GUI(QtGui.QWidget):
 		self.bpm_curve.setData(x=self.analysis_scroll_time_axis,y=([point for point in heart_rate_array]))
 		self.ibi_curve.setData(x=self.analysis_scroll_time_axis,y=([point for point in ibi_array]))		
 		# Update the breathing rate curves
+		
+
 		for i,chan in enumerate(breathing_rate_array):
-			chan = np.asarray(chan)
-			chan = chan/40 	#turn breaths into a percentage of 120 (thearetical maximum)
-			if np.mean(chan) != 0:
+			if np.mean(chan) == 0:
 				self.breathing_curves[i].setVisible(False)
+				# self.legend.removeItem("Breathing %s Rate" % i)
+			elif np.mean!=0 and not self.BREATHING_LEGEND[i]:
+				self.legend.addItem(self.breathing_curves[i], "Breathing {} Rate".format(i+1))
+				self.BREATHING_LEGEND[i] = True
 			else:
+				chan = np.asarray(chan)
+				chan = chan/40 	#turn breaths into a percentage of 120 (thearetical maximum)
 				self.breathing_curves[i].setVisible(True)
 				self.breathing_curves[i].setData(x=self.analysis_scroll_time_axis,y=([point for point in chan]))
+			
 
 
-		
 		#update the breathing bands
 		for i,ch in enumerate(raw_rband):
 			if ch != 0:
