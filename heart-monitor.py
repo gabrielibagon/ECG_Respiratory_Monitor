@@ -51,7 +51,7 @@ class GUI(QtGui.QWidget):
 		# ECG Scroll
 		self.ecg_scroll = pg.PlotWidget(title="ECG")
 		self.ecg_scroll_time_axis = np.linspace(-7.3,0,2048)							# the y axis of the scroll plot
-		self.ecg_scroll.setXRange(-7.2,.1, padding=.0001)
+		self.ecg_scroll.setXRange(-7.2,-.1, padding=.0001)
 		self.ecg_scroll.setYRange(-500,500)
 		self.ecg_scroll.setLabel('bottom','Time','Seconds')
 		self.ecg_scroll.setLabel('left','Amplitude','uV')
@@ -137,7 +137,7 @@ class GUI(QtGui.QWidget):
 		
 		breathing_rate_array = np.asarray(breathing_rate_array)
 		breathing_rate_array = breathing_rate_array/120 	#turn breaths into a percentage of 120 (thearetical maximum)
-
+		heart_rate_array[0] = 10
 		# Update plot
 		self.ecg_curve.setData(x=self.ecg_scroll_time_axis,y=([point for point in ecg_data]))
 		self.bpm_curve.setData(x=self.analysis_scroll_time_axis,y=([point for point in heart_rate_array]))
@@ -233,8 +233,7 @@ class Data_Buffer(QThread):
 			filtered = self.analyze_filters.bandpass(self.data_buf)
 			self.analysis.peak_detect(filtered)
 			#BREATHING DATA
-			# breathing_rate = self.analysis.respiratory_analysis(self.rband_buf1)
-			# print(self.analysis.hrv_array)
+			breathing_rate = self.analysis.respiratory_analysis(self.rband_buf3)
 
 			#pack data into dictionary
 			data_to_plot = {
@@ -253,33 +252,36 @@ class Analysis:
 		self.last_breath = 0
 		self.number_of_beats = 15
 		self.beat_buffer = deque([0]*self.number_of_beats)
+		self.breath_buffer = deque([0]*self.number_of_beats)
 		self.ibi_array = deque([0]*500)
 		self.hrv_diff = deque([0]*100)
 		self.heart_rate_array = deque([0]*500)
 		self.breathing_rate_array = deque([0]*500)
 		self.current_bpm = 0
-		self.BREATH = True
+		self.BREATH = False
+
 
 
 	def peak_detect(self,data_buf):
 		peak_data = self.pan_tompkins(data_buf)
+		self.peak_data = peak_data
 		current_time = time.time()
 		if self.current_bpm > 40:
 			time_threshold = 1/(self.current_bpm+20) * 60 #the next beat can't be more than 10 bpm higher than the last
 		else:
 			time_threshold = .300	
 		for i in range(25):
-			# if a heart beat is detected after a certain amount of time
+			# Threshold for heartbeat: 1) 300ms since last beat 2) peak detected
 			if (current_time - self.last_beat >.300 and (peak_data[-(i+1)] - peak_data[-i]) > 10):
 				#calculate the interbeat interval
 				time_dif = current_time - self.last_beat
 				self.last_beat = current_time
-			
 				#find the hrv interval
 				self.ibi_array.popleft()
 				self.ibi_array.append(time_dif)
 				#calculate the bpm
 				self.bpm()
+				break
 
 
 	def pan_tompkins(self,data_buf):
@@ -298,6 +300,7 @@ class Analysis:
 		integral = np.zeros((len(square)))
 		for i in range(len(square)):
 			integral[i] = np.trapz(square[i:i+window])
+		# print(integral)
 		return integral
 		
 	def bpm(self):
@@ -313,19 +316,22 @@ class Analysis:
 	def respiratory_analysis(self,resp_buf):
 		resp_diff = np.diff(resp_buf)
 		current_time = time.time()
-		for i in range(25):
-			if ((resp_buf[-(i+75)] - resp_buf[-i]) < -10):
-				time_dif = current_time - self.last_breath
-				self.last_breath = current_time
-				self.breathing_rate_array.popleft()
-				self.breathing_rate_array.append(time_dif)
-				break
+		if (not self.BREATH and (resp_buf[-150] - resp_buf[-1]) < -15):
+			time_dif = current_time - self.last_breath
+			self.last_breath = current_time
+			self.breathing_rate_array.popleft()
+			self.breathing_rate_array.append(time_dif)
+			self.breaths_per_minute()
+			self.BREATH = True
+		elif (self.BREATH and (resp_buf[-150] - resp_buf[-1]) > 15):
+			self.BREATH = False
+			print("OUT")
 
 	def breaths_per_minute(self):
-		self.beat_buffer.popleft()
-		self.beat_buffer.append(self.last_beat)
-		total_time = self.beat_buffer[-1] - self.beat_buffer[0]
-		bpm = (60/total_time)*self.number_of_beats
+		self.breath_buffer.popleft()
+		self.breath_buffer.append(self.last_breath)
+		total_time = self.breath_buffer[-1] - self.breath_buffer[0]
+		bpm = (60/total_time)*len(self.breath_buffer)
 		self.current_bpm = int(bpm)
 		self.bpm_array.popleft()
 		self.bpm_array.append(self.current_bpm)
