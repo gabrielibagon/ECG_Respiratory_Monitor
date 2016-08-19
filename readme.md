@@ -16,13 +16,13 @@ This application is designed to work with the OpenBCI 32bit Board. The board mus
 1. Download the [ECG_Respiratory_Monitor](https://github.com/gabrielibagon/ECG_Respiratory_Monitor) repository from Github.
 2. Navigate to this folder using your command line/terminal
 3. Install dependencies
+
 	In Terminal, type:
 
 	`pip install -r requirements.txt`
 
-	If you do not have `pip` installed, first type `sudo easy-install pip` and then try to command again.
+	If you do not have `pip` installed, first type `sudo easy-install pip` and then try the above command again.
 
-Your program should be set up to run.
 
 # Usage
 
